@@ -1,0 +1,10 @@
+check_name,failed_rows
+1. Missing order IDs,0
+2. Duplicate order IDs,0
+3. Invalid delivery dates,0
+4. Invalid order items,0
+5. Missing customers,0
+6. Invalid review scores,0
+7. Payment mismatches,267
+8. Orders without items,775
+9. Orders without payments,1
