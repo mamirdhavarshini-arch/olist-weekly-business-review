@@ -1,5 +1,5 @@
 from pathlib import Path
-
+import csv
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
@@ -162,6 +162,16 @@ styles.add(ParagraphStyle(
 ))
 
 story = []
+
+def read_csv_rows(filename):
+    """Read a CSV result file from the project root."""
+    path = ROOT / filename
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Missing SQL result CSV: {path}"
+        )
+    with path.open("r", newline="", encoding="utf-8-sig") as file:
+        return list(csv.DictReader(file))
 
 
 def heading(text):
