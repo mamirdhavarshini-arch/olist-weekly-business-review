@@ -27,6 +27,7 @@ REQUIRED_FILES = [
 ]
 
 # These checks must return zero for the pipeline to continue.
+# Every quality check must pass before mart creation.
 CRITICAL_CHECKS = {
     "1. Missing order IDs",
     "2. Duplicate order IDs",
@@ -34,15 +35,12 @@ CRITICAL_CHECKS = {
     "4. Invalid order items",
     "5. Missing customers",
     "6. Invalid review scores",
-}
-
-# These checks are recorded for investigation.
-# They do not automatically stop the pipeline.
-WARNING_CHECKS = {
     "7. Payment mismatches",
     "8. Orders without items",
     "9. Orders without payments",
 }
+
+WARNING_CHECKS = set()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -223,50 +221,34 @@ def load_raw_tables(engine):
         )
 
 
+
 def run_quality_checks(connection):
-    """Run all checks and stop for critical failures."""
+    """Run all quality checks and stop for any failures."""
     sql = read_sql_file("02_data_quality_checks.sql")
 
-    results = pd.read_sql_query(
-        text(sql),
-        connection,
-    )
+    results = pd.read_sql_query(text(sql), connection)
 
-    required_result_columns = {"check_name", "failed_rows"}
-
-    if not required_result_columns.issubset(results.columns):
+    required_columns = {"check_name", "failed_rows"}
+    if not required_columns.issubset(results.columns):
         raise ValueError(
             "Quality-check SQL must return check_name and failed_rows."
         )
 
     results["failed_rows"] = pd.to_numeric(
-        results["failed_rows"],
-        errors="raise",
+        results["failed_rows"], errors="raise"
     )
 
-    logging.info("Data-quality results:")
-
-    for _, row in results.iterrows():
-        name = str(row["check_name"])
-        count = int(row["failed_rows"])
-
-        logging.info("%s: %s failed rows", name, count)
-
-        if name in WARNING_CHECKS and count > 0:
-            logging.warning(
-                "%s requires investigation; pipeline will continue.",
-                name,
-            )
-
-    unknown_checks = (
-        set(results["check_name"])
-        - CRITICAL_CHECKS
-        - WARNING_CHECKS
+    # Save results even if a check fails.
+    results.to_csv(
+        BASE_DIR / "data_quality_results.csv",
+        index=False,
     )
 
-    missing_checks = (
-        CRITICAL_CHECKS | WARNING_CHECKS
-    ) - set(results["check_name"])
+    expected_checks = CRITICAL_CHECKS
+    actual_checks = set(results["check_name"])
+
+    unknown_checks = actual_checks - expected_checks
+    missing_checks = expected_checks - actual_checks
 
     if unknown_checks:
         raise ValueError(
@@ -278,30 +260,29 @@ def run_quality_checks(connection):
             f"Expected quality checks are missing: {sorted(missing_checks)}"
         )
 
-    critical_failures = results[
-        results["check_name"].isin(CRITICAL_CHECKS)
-        & (results["failed_rows"] > 0)
-    ]
-
-    # Save the results so they can be included in the report.
-    results.to_csv(
-        BASE_DIR / "data_quality_results.csv",
-        index=False,
-    )
-
-    if not critical_failures.empty:
-        details = critical_failures[
-            ["check_name", "failed_rows"]
-        ].to_dict("records")
-
-        raise RuntimeError(
-            f"Critical data-quality checks failed: {details}. "
-            "Mart creation has been stopped."
+    logging.info("Data-quality results:")
+    for _, row in results.iterrows():
+        logging.info(
+            "%s: %s failed rows",
+            row["check_name"],
+            int(row["failed_rows"]),
         )
 
-    logging.info(
-        "All critical data-quality checks passed."
-    )
+    failures = results[results["failed_rows"] > 0]
+
+    if not failures.empty:
+        details = "\n".join(
+            f"{row['check_name']}: {int(row['failed_rows'])} failed rows"
+            for _, row in failures.iterrows()
+        )
+
+        logging.error("Data-quality checks failed:\n%s", details)
+        raise RuntimeError(
+            "Pipeline stopped: one or more data-quality checks failed."
+        )
+
+    logging.info("All nine data-quality checks passed.")
+
 
 
 def main():
