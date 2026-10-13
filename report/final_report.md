@@ -17,7 +17,7 @@ The workflow consists of four stages:
 
 The mart was verified to contain 99,441 rows and 99,441 distinct order IDs.
 
-## 3. ## Data Quality Checks
+## 3. Data Quality Checks
 
 Nine data-quality checks were executed on the Olist dataset.
 
@@ -33,9 +33,9 @@ Nine data-quality checks were executed on the Olist dataset.
 | Orders without items | 775 | Flagged for investigation |
 | Orders without payments | 1 | Flagged for investigation |
 
-The six critical checks passed without failures. Payment mismatches, orders without items, and orders without payments were reported as warnings, and the pipeline continued. The 775 orders without items were largely associated with unavailable or canceled statuses. The single order without a payment record requires investigation. These exceptions were not silently deleted or corrected.
+The six critical checks passed without failures. Three additional checks identified unresolved exceptions: 267 payment mismatches, 775 orders without items, and one order without a payment record. The orders without items were largely associated with unavailable or canceled statuses. These exceptions were not silently deleted or corrected and require investigation.
 
-The pipeline completed successfully and created 99,441 mart rows with 99,441 distinct order IDs. The three warning checks remain unresolved and should be investigated before using the affected records for operational decisions.
+The pipeline now enforces strict fail-fast behavior. If any data-quality check returns failed rows, the pipeline logs an error and stops before mart creation. In the current dataset, the three unresolved checks cause the pipeline to stop. Therefore, the mart must be created only after these exceptions have been investigated or handled under an explicitly documented exception policy.
 
 ## 4. Business Metrics and Analysis
 
